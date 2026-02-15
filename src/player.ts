@@ -1,19 +1,26 @@
-import * as Engine from "./engine.js"
+import type { Melody, Note } from "./data.js"
 import { melodies } from "./data.js"
-import type { Note, Melody } from "./data.js"
-import Musician from "./musician.js"
+import * as Engine from "./engine.js"
+import * as math from "./math.js"
 import Orchestra from "./orchestra.js"
 import * as Render from "./render.js"
-import Plot from "./plot.js"
-import * as math from "./math.js"
+import * as Audio from "./audio.js"
 
-export default class Player extends Musician {
+export default class Player {
   static fadeRate = 0.03
   static transposeOnRepeat = 2
   static minTransposition = 1 / 16
   static maxTransposition = 8
   static minDeathVelocity = 1 / 64
   static maxDeathVelocity = 32
+
+  index: number
+  life: number
+  exp: number
+  volume = 1
+  pan = math.rand(-1, 1) ** 3 // Bias toward 0
+  color: string
+  alive = true
 
   phase = 0
   reps = 0
@@ -28,15 +35,11 @@ export default class Player extends Musician {
   detune = math.rand(0.99, 1.01)
   fastest = math.randInt(200, 400)
 
-  // history = new Plot(1, 1000)
-
   constructor(sync: number, exp: number) {
-    super(samples)
-    // super(["MaternalXylo"])
+    this.index = Orchestra.nextPlayerIndex++
+    this.color = math.hsl(this.index * 11, 60, 70)
 
     this.melody = math.arrRand(melodies)
-    // this.melody = melodies[(6 + this.index) % melodies.length]
-    // this.melody = melodies[2]
 
     this.transposition = [0.5, 1, 2][this.index % 3]
 
@@ -77,7 +80,20 @@ export default class Player extends Musician {
     return lifeUnscaled
   }
 
-  static ratios = [1, 256 / 243, 9 / 8, 32 / 27, 81 / 64, 4 / 3, 1024 / 729, 3 / 2, 128 / 81, 27 / 16, 16 / 9, 243 / 128]
+  static ratios = [
+    1,
+    256 / 243,
+    9 / 8,
+    32 / 27,
+    81 / 64,
+    4 / 3,
+    1024 / 729,
+    3 / 2,
+    128 / 81,
+    27 / 16,
+    16 / 9,
+    243 / 128,
+  ]
 
   static pythagorean(pitch: number) {
     const octave = Math.floor(pitch / 12)
@@ -85,8 +101,11 @@ export default class Player extends Musician {
     return Math.pow(2, octave) * Player.ratios[pitchClass]
   }
 
+  halve = () => this.exp--
+  double = () => this.exp++
+
   tick() {
-    super.tick()
+    this.life += 2 ** this.exp * Orchestra.velocity * Engine.dt
 
     this.phase += 2 ** this.exp * Orchestra.velocity * Engine.dt
 
@@ -95,9 +114,7 @@ export default class Player extends Musician {
     if (this.phase >= this.reps + nextNote.position / this.melody.beatsPerBar) {
       this.currentNote = nextNote
 
-      // const pitch = Player.pythagorean(this.currentNote.pitch) * this.transposition * Orchestra.transposition
       const pitch = 2 ** ((this.detune * this.currentNote.pitch) / 12) * this.transposition * Orchestra.transposition
-      // const pitch = 4
 
       this.nextNoteIndex++
 
@@ -105,7 +122,7 @@ export default class Player extends Musician {
       this.lastNoteTime = performance.now()
 
       this.volume = math.clip(math.renormalized(this.lastNoteDist, this.fastest, this.fastest + 200, 0, 1))
-      super.play(pitch)
+      Audio.play("MaternalXylo", { pitch, volume: this.volume, pan: this.pan })
 
       if (this.lastNoteDist < this.fastest) {
         this.lastNoteDist = Infinity
@@ -113,7 +130,9 @@ export default class Player extends Musician {
         this.phase /= 2
         this.reps = Math.floor(this.reps / 2)
         this.melody = math.arrRand(melodies)
-        this.nextNoteIndex = this.melody.notes.findIndex((note) => note.position / this.melody.beatsPerBar >= this.phase)
+        this.nextNoteIndex = this.melody.notes.findIndex(
+          (note) => note.position / this.melody.beatsPerBar >= this.phase
+        )
         if (this.nextNoteIndex < 0) {
           this.nextNoteIndex = 0
           this.reps++
@@ -125,15 +144,11 @@ export default class Player extends Musician {
       if (this.nextNoteIndex >= this.melody.notes.length) {
         this.nextNoteIndex = 0
         this.reps++
-        // this.transposition *= Player.transposeOnRepeat
-        // if (math.rand() > 0.95) Orchestra.transpose()
       }
     }
-
-    // this.history.add(this.prevNote)
   }
 
-  draw(context: CanvasRenderingContext2D, i: number, allPlayers: [Musician]) {
+  draw(context: CanvasRenderingContext2D, i: number, allPlayers: Player[]) {
     context.fillStyle = context.strokeStyle = this.color
 
     const prevNote = this.melody.notes[math.mod(this.nextNoteIndex - 1, this.melody.notes.length)]
@@ -141,8 +156,6 @@ export default class Player extends Musician {
     const phase = math.mod(this.phase, 1)
 
     const x = (window.innerWidth * (1 + i)) / (allPlayers.length + 1)
-    // const y = math.renormalized(this.currentNote.pitch, -48, 96, window.innerHeight, 0)
-    // const y = math.renormalized(phase, -1, 2, window.innerHeight, 0)
     const y = 300
 
     const tau = Math.PI * 2
@@ -174,100 +187,15 @@ export default class Player extends Musician {
 
     const stack = Render.beginStack(x, 80)
     Render.stackV(context, stack, this.melody.name)
-    Render.stackV(context, stack, this.sample)
     Render.stackV(context, stack, "exp " + this.exp)
     Render.stackV(context, stack, "phase " + this.phase.toFixed(2))
     Render.stackV(context, stack, "life " + this.life.toFixed(2))
     Render.stackV(context, stack, "Note " + this.currentNote.position)
     Render.stackV(context, stack, "Pitch " + this.currentNote.pitch)
-    Render.stackV(context, stack, "X " + this.transposition)
+    Render.stackV(context, stack, "Trans " + this.transposition)
     Render.stackV(context, stack, "" + this.lastNoteDist.toFixed(2))
 
     context.fillStyle = "#FFF"
     context.fillText(this.index.toString(), x, y)
   }
 }
-
-const samples = [
-  // "1BCLo",
-  // "2BCHi",
-  // "3Beep",
-  // "4Bit",
-  // "5Glock",
-  // "6OrganBass",
-  // "ArghBassGuitar",
-  // "ArghBlock",
-  // "ArghCat",
-  // "ArghChrome",
-  // "ArghKick",
-  // "ArghOrgan",
-  // "ArghOrganHi",
-  // "ArghOrganLow",
-  // "ArghPiano",
-  // "ArghPianoHi",
-  // "ArghRim",
-  // "ArghRim2",
-  // "ArghSnareFlam",
-  // "ArghSnareFlam2",
-  // "ArghSuck",
-  // "ArghSynth",
-  // "ArghTunk",
-  // "ArghWho",
-  // "ChordDidg",
-  // "ChordFart",
-  // "ChordFeedback",
-  // "ChordFeedback2",
-  // "ChordFeedbackDrone",
-  // "ChordFeedbackSting",
-  // "ChordFeedbackSwell",
-  // "ChordFeedbackSwell2",
-  // "ChordSproingy",
-  // "ChordThunderBuzz",
-  // "CrashMute",
-  // "EarnstChrom",
-  // "EarnstFlute",
-  // "EarnstFluteFlutter",
-  // "EarnstFluteFlutter2",
-  // "EarnstSing",
-  // "EarnstSingOvertones",
-  // "EarnstSingOvertones2",
-  // "EarnstSingPulse",
-  // "EarnstSingWav",
-  // "EarnstWarble",
-  // "FloorTom",
-  // "Gas",
-  // "Hat",
-  // "LarAcc",
-  // "LarBass",
-  // "LarFan",
-  // "LarFlute",
-  // "LarFlute2",
-  // "LarJawharp",
-  // "LarJawharp2",
-  // "LarJawharpR",
-  // "LarMelodicaLow",
-  // "LarMelodicaSwell",
-  // "LarPiano",
-  // "LarSubKick",
-  // "LarXylo",
-  // "LarXylo2",
-  // "MaternalAccStrum",
-  // "MaternalBowedGuitar",
-  // "MaternalCello",
-  // "MaternalCello2",
-  // "MaternalGlock",
-  // "MaternalPiano",
-  // "MaternalPiano2",
-  "MaternalXylo",
-  // "MewlPurr",
-  // "MewlSing",
-  // "Ride",
-  // "SlideUp",
-  // "Snare",
-  // "TanBCR",
-  // "TanPianoEchos",
-  // "TanPulsar",
-  // "TanXylo",
-  // "Tick",
-  // "Vibra",
-]

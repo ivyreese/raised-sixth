@@ -1,9 +1,7 @@
 {
   "compilerOptions": {
-    "lib": [
-      "ES2023",
-      "DOM",
-    ],
+    "noEmit": true,
+    "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "target": "ESNext"
   }
