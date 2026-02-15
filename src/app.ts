@@ -1,10 +1,12 @@
 const START_BPM = 10
-const METROS = 5
+const MULTIPLES = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
 const MIN_BPM = 20
-const MAX_BPM = MIN_BPM * 2 ** METROS
-const FADE_METROS = 3 // should prob be smaller than NUM_METROS/2
+const MAX_MULTIPLE = Math.max(...MULTIPLES)
+const MAX_BPM = MIN_BPM * MAX_MULTIPLE
+const OCTAVE_RANGE = Math.log2(MAX_MULTIPLE)
+const FADE_OCTAVES = 3 // should prob be smaller than OCTAVE_RANGE/2
 const INTERVAL_RATIO = 2 // set to 2 for octaves, 4/3 for forths, etc
-const BASE_PITCH = 0.25 // pitch of the lowest voice at MIN_BPM
+const BASE_PITCH = 0.125 // pitch of the lowest voice at MIN_BPM
 const BPM_PITCH_TRACK = 1 // 0 = off, 1 = one octave per BPM doubling, fractional for partial
 
 let bpm = START_BPM
@@ -25,7 +27,7 @@ const remap = (v: number, inMin = 0, inMax = 1, outMin = 0, outMax = 1) =>
   outMin + ((v - inMin) / (inMax - inMin)) * (outMax - outMin)
 
 function metronomeTick() {
-  accel = remap(time, 0, 10, 1, 1.1) // MAKE THIS SPECIAL
+  accel = 1.05 //remap(time, 0, 10, 1, 1.1) // MAKE THIS SPECIAL
 
   // apply accel
   bpm *= accel ** dt
@@ -39,16 +41,15 @@ function metronomeTick() {
   const deltaPhase = (bpm / 60) * dt
   phase += deltaPhase
 
-  for (let n = 0; n <= METROS; n++) {
-    const voiceBPM = bpm * 2 ** n
+  for (const multiple of MULTIPLES) {
+    const voiceBPM = bpm * multiple
     if (voiceBPM < MIN_BPM || voiceBPM > MAX_BPM) continue
 
-    const scale = 2 ** n
-    const prev = (phase - deltaPhase) * scale
-    const curr = phase * scale
+    const prev = (phase - deltaPhase) * multiple
+    const curr = phase * multiple
 
     if (Math.floor(curr) > Math.floor(prev)) {
-      const pitch = BASE_PITCH * INTERVAL_RATIO ** n * (bpm / MIN_BPM) ** BPM_PITCH_TRACK
+      const pitch = BASE_PITCH * multiple ** Math.log2(INTERVAL_RATIO) * (bpm / MIN_BPM) ** BPM_PITCH_TRACK
       play(pitch, voiceVolume(voiceBPM))
     }
   }
@@ -56,8 +57,8 @@ function metronomeTick() {
 
 function voiceVolume(bpm: number): number {
   const octaves = Math.log2(bpm / MIN_BPM)
-  const fadeIn = clip(octaves / FADE_METROS)
-  const fadeOut = clip((METROS - octaves) / FADE_METROS)
+  const fadeIn = clip(octaves / FADE_OCTAVES)
+  const fadeOut = clip((OCTAVE_RANGE - octaves) / FADE_OCTAVES)
   return fadeIn * fadeOut
 }
 
@@ -156,14 +157,15 @@ function render() {
   }
 
   // Voices
-  for (let n = 0; n <= METROS; n++) {
-    const voiceBPM = bpm * 2 ** n
+  for (let i = 0; i < MULTIPLES.length; i++) {
+    const multiple = MULTIPLES[i]
+    const voiceBPM = bpm * multiple
     if (voiceBPM < MIN_BPM || voiceBPM > MAX_BPM) continue
 
     const vol = voiceVolume(voiceBPM)
-    const voicePhase = mod(phase * 2 ** n, 1)
+    const voicePhase = mod(phase * multiple, 1)
     const w = window.innerWidth
-    const x = 0.1 * w + 0.8 * w * (n / (METROS - 1))
+    const x = 0.1 * w + 0.8 * w * (i / (MULTIPLES.length - 1))
     const y = window.innerHeight / 2
     const alpha = 0.2 + 0.8 * vol
 
