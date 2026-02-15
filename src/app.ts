@@ -10,6 +10,7 @@ const BPM_PITCH_TRACK = 1 // 0 = off, 1 = one octave per BPM doubling, fractiona
 let bpm = START_BPM
 let phase = 0
 let accel = 1
+let time = 0
 
 const preloadElm = document.querySelector(".preload") as HTMLElement
 const canvas = document.querySelector("canvas") as HTMLCanvasElement
@@ -20,9 +21,11 @@ preloadElm.textContent = "Click To Play"
 const clip = (i: number, min = 0, max = 1) => Math.min(Math.max(i, min), max)
 const mod = (n: number, m = 1) => ((n % m) + m) % m
 const rand = (min = 0, max = 1) => Math.random() * (max - min) + min
+const remap = (v: number, inMin = 0, inMax = 1, outMin = 0, outMax = 1) =>
+  outMin + ((v - inMin) / (inMax - inMin)) * (outMax - outMin)
 
 function metronomeTick() {
-  accel = 0.9 // MAKE THIS SPECIAL
+  accel = remap(time, 0, 10, 1, 1.1) // MAKE THIS SPECIAL
 
   // apply accel
   bpm *= accel ** dt
@@ -71,6 +74,7 @@ function engineTick(ms: number) {
   const lastWallTime = wallTime
   wallTime = ms / 1000
   dt = Math.min(wallTime - lastWallTime, 0.1)
+  time += dt
 }
 
 // Audio
@@ -175,6 +179,16 @@ function render() {
     ctx.fillText(`${voiceBPM.toFixed(0)}`, x, y + 50)
   }
 }
+
+// Controls
+
+function reset() {
+  bpm = START_BPM
+  phase = 0
+  time = 0
+}
+
+document.getElementById("reset")!.addEventListener("click", reset)
 
 // App
 

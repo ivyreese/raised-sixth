@@ -31,6 +31,28 @@ canvas {
   pointer-events: none;
 }
 
+.controls {
+  position: absolute;
+  bottom: 1.5em;
+  left: 1.5em;
+  display: flex;
+  gap: 0.5em;
+}
+
+.controls button {
+  background: #fff2;
+  border: 1px solid #fff4;
+  color: white;
+  padding: 0.5em 1.2em;
+  border-radius: 0.3em;
+  font: inherit;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: #fff3;
+}
+
 .preload {
   position: absolute;
   font-size: 2em;
