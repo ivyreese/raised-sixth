@@ -1,5 +1,5 @@
 const START_BPM = 10
-const MULTIPLES = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
+const MULTIPLES = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32]
 const MIN_BPM = 20
 const MAX_MULTIPLE = Math.max(...MULTIPLES)
 const MAX_BPM = MIN_BPM * MAX_MULTIPLE
@@ -12,9 +12,11 @@ const BPM_PITCH_TRACK = 1 // 0 = off, 1 = one octave per BPM doubling, fractiona
 let bpm = START_BPM
 let phase = 0
 let accel = 1
+let prevAccel = 1
 let time = 0
 
 const preloadElm = document.querySelector(".preload") as HTMLElement
+const hudElm = document.getElementById("hud") as HTMLElement
 const canvas = document.querySelector("canvas") as HTMLCanvasElement
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D
 
@@ -27,7 +29,8 @@ const remap = (v: number, inMin = 0, inMax = 1, outMin = 0, outMax = 1) =>
   outMin + ((v - inMin) / (inMax - inMin)) * (outMax - outMin)
 
 function metronomeTick() {
-  accel = 1.05 //remap(time, 0, 10, 1, 1.1) // MAKE THIS SPECIAL
+  prevAccel = accel
+  accel = remap(Math.sin(time / 10), -1, 1, 0.8, 1.2) // MAKE THIS SPECIAL
 
   // apply accel
   bpm *= accel ** dt
@@ -50,7 +53,7 @@ function metronomeTick() {
 
     if (Math.floor(curr) > Math.floor(prev)) {
       const pitch = BASE_PITCH * multiple ** Math.log2(INTERVAL_RATIO) * (bpm / MIN_BPM) ** BPM_PITCH_TRACK
-      play(pitch, voiceVolume(voiceBPM))
+      play(pitch, voiceVolume(voiceBPM) * clip(time / 2))
     }
   }
 }
@@ -97,7 +100,7 @@ function setupAudio() {
   audioContext = new window.AudioContext()
   const sampleRate = audioContext.sampleRate
 
-  masterInput = new GainNode(audioContext, { gain: 1 })
+  masterInput = new GainNode(audioContext, { gain: 0.5 })
   const analyser = audioContext.createAnalyser()
   const softCompressor = audioContext.createDynamicsCompressor()
   const hardCompressor = audioContext.createDynamicsCompressor()
@@ -145,16 +148,40 @@ function setupAudio() {
     .then((b) => (buffer = b))
 }
 
+function drawArrow(x: number, y: number, length: number, label: string) {
+  ctx.fillStyle = "#fff"
+  ctx.fillText(label, x, y - 12)
+  if (Math.abs(length) < 1) return
+  const tip = 6
+  const stemEnd = length - Math.sign(length) * tip
+  ctx.strokeStyle = ctx.fillStyle = "#fff"
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + stemEnd, y)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x + length, y)
+  ctx.lineTo(x + stemEnd, y - tip / 2)
+  ctx.lineTo(x + stemEnd, y + tip / 2)
+  ctx.fill()
+}
+
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.fillStyle = ctx.strokeStyle = "#FFF"
 
   // HUD
-  let hx = 36
-  for (const text of [`BPM ${bpm.toFixed(1)}`, `Phase ${phase.toFixed(2)}`, `Accel ${accel.toFixed(4)}`]) {
-    ctx.fillText(text, hx, 16)
-    hx += 20 + ctx.measureText(text).width
-  }
+  hudElm.textContent = `BPM ${bpm.toFixed(1)}  Phase ${phase.toFixed(2)}  Vel ${(bpm / 60).toFixed(2)}  Accel ${accel.toFixed(4)}`
+
+  // Arrows
+  const cx = window.innerWidth / 2
+  const voicesY = window.innerHeight / 2
+  const vel = Math.log2(accel)
+  const acc = (accel - prevAccel) / Math.max(dt, 1e-6)
+  const w = window.innerWidth
+  drawArrow(cx, voicesY - 80, vel * w * 0.5, "Velocity")
+  drawArrow(cx, voicesY - 120, acc * w * 5, "Acceleration")
 
   // Voices
   for (let i = 0; i < MULTIPLES.length; i++) {
@@ -162,23 +189,30 @@ function render() {
     const voiceBPM = bpm * multiple
     if (voiceBPM < MIN_BPM || voiceBPM > MAX_BPM) continue
 
-    const vol = voiceVolume(voiceBPM)
-    const voicePhase = mod(phase * multiple, 1)
+    const alpha = voiceVolume(voiceBPM)
+    const voicePhase = mod(phase * multiple, 2)
     const w = window.innerWidth
-    const x = 0.1 * w + 0.8 * w * (i / (MULTIPLES.length - 1))
+    const x = 0.1 * w + 0.8 * w * (Math.log2(voiceBPM / MIN_BPM) / OCTAVE_RANGE)
     const y = window.innerHeight / 2
-    const alpha = 0.2 + 0.8 * vol
 
     ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`
     ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`
 
-    const tau = Math.PI * 2
+    const angle = Math.sin(voicePhase * Math.PI) * 0.4
+    const armLen = 50
+    const nearZero = 1 - Math.abs(Math.sin(voicePhase * Math.PI))
     ctx.beginPath()
-    ctx.lineWidth = 2
-    ctx.arc(x, y, 30, -tau / 4, -tau / 4 + tau * voicePhase)
+    ctx.lineWidth = 2 + 2 * nearZero ** 8
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + Math.sin(angle) * armLen, y - Math.cos(angle) * armLen)
     ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(x, y, 2, 0, Math.PI * 2)
+    ctx.fill()
 
-    ctx.fillText(`${voiceBPM.toFixed(0)}`, x, y + 50)
+    ctx.fillText(`${voiceBPM.toFixed(0)}`, x, y + 16)
+    ctx.lineWidth = 2 * nearZero ** 8
+    ctx.strokeText(`${voiceBPM.toFixed(0)}`, x, y + 16)
   }
 }
 
@@ -187,6 +221,8 @@ function render() {
 function reset() {
   bpm = START_BPM
   phase = 0
+  accel = 1
+  prevAccel = 1
   time = 0
 }
 
@@ -225,7 +261,7 @@ function resize() {
   ctx.font = "12px sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  ctx.lineCap = "round"
+  ctx.lineCap = "butt"
   ctx.lineJoin = "round"
   render()
 }

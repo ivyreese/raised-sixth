@@ -33,10 +33,15 @@ canvas {
 
 .controls {
   position: absolute;
-  bottom: 1.5em;
+  top: 1.5em;
   left: 1.5em;
   display: flex;
+  align-items: center;
   gap: 0.5em;
+}
+
+#hud {
+  color: #fff8;
 }
 
 .controls button {
