@@ -1,10 +1,10 @@
-const START_BPM = 10
-const MULTIPLES = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32]
+const START_BPM = 13.75 * 2
+const MULTIPLES = [1, 2, 4, 8, 16, 32]
 const MIN_BPM = 20
 const MAX_MULTIPLE = Math.max(...MULTIPLES)
 const MAX_BPM = MIN_BPM * MAX_MULTIPLE
 const OCTAVE_RANGE = Math.log2(MAX_MULTIPLE)
-const FADE_OCTAVES = 3 // should prob be smaller than OCTAVE_RANGE/2
+const FADE_OCTAVES = 1 // should prob be smaller than OCTAVE_RANGE/2
 const INTERVAL_RATIO = 2 // set to 2 for octaves, 4/3 for forths, etc
 const BASE_PITCH = 0.125 // pitch of the lowest voice at MIN_BPM
 const BPM_PITCH_TRACK = 1 // 0 = off, 1 = one octave per BPM doubling, fractional for partial
@@ -12,7 +12,6 @@ const BPM_PITCH_TRACK = 1 // 0 = off, 1 = one octave per BPM doubling, fractiona
 let bpm = START_BPM
 let phase = 0
 let accel = 1
-let prevAccel = 1
 let time = 0
 
 const preloadElm = document.querySelector(".preload") as HTMLElement
@@ -29,10 +28,7 @@ const remap = (v: number, inMin = 0, inMax = 1, outMin = 0, outMax = 1) =>
   outMin + ((v - inMin) / (inMax - inMin)) * (outMax - outMin)
 
 function metronomeTick() {
-  prevAccel = accel
-  accel = remap(Math.sin(time / 10), -1, 1, 0.8, 1.2) // MAKE THIS SPECIAL
-
-  // apply accel
+  accel = 1 + (time / 120) ** 3
   bpm *= accel ** dt
 
   // keep in the range [MIN_BPM, MIN_BPM * 2), adjusting phase to preserve beat alignment
@@ -177,11 +173,9 @@ function render() {
   // Arrows
   const cx = window.innerWidth / 2
   const voicesY = window.innerHeight / 2
-  const vel = Math.log2(accel)
-  const acc = (accel - prevAccel) / Math.max(dt, 1e-6)
+  const acc = Math.log2(accel)
   const w = window.innerWidth
-  drawArrow(cx, voicesY - 80, vel * w * 0.5, "Velocity")
-  drawArrow(cx, voicesY - 120, acc * w * 5, "Acceleration")
+  drawArrow(cx, voicesY - 120, acc * w * 0.1, "Acceleration")
 
   // Voices
   for (let i = 0; i < MULTIPLES.length; i++) {
@@ -222,7 +216,6 @@ function reset() {
   bpm = START_BPM
   phase = 0
   accel = 1
-  prevAccel = 1
   time = 0
 }
 
